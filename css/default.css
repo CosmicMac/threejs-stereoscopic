@@ -1,0 +1,243 @@
+body {
+    font-family: sans-serif;
+    margin: 0;
+    overflow: hidden;
+}
+
+canvas {
+    width: 100%;
+    height: 100%
+}
+
+#main {
+    width: 100%;
+    height: 100%
+}
+
+#statusBar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 5px 10px;
+    background-color: silver;
+    opacity: .5;
+}
+
+#statusLink {
+    float: right;
+}
+
+#statusText {
+    display: inline-block;
+}
+
+#settingsArrow {
+    display: none;
+    position: absolute;
+    top: 50px;
+    right: 25px;
+    animation: 1s 3s 1 forwards settingsArrowAnim;
+    -webkit-animation: 1s 3s 1 forwards settingsArrowAnim;
+}
+
+@keyframes settingsArrowAnim {
+    to { opacity: 0; visibility: hidden; }
+}
+
+@-webkit-keyframes settingsArrowAnim {
+    to { opacity: 0; visibility: hidden; }
+}
+
+#btnSettings {
+    position: absolute;
+    top: 0;
+    right: 0;
+    margin: 5px 10px;
+    color: blue;
+    cursor: pointer;
+}
+
+#settings {
+    display: none;
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    background-color: #ffffff;
+    border: 2px solid silver;
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+#settingsTitle {
+    font-weight: bold;
+    font-size: 1.1em;
+    padding: 2px 15px;
+    color: white;
+    background-color: silver;
+}
+
+#btnClose {
+    border: 1px solid transparent;
+    position: absolute;
+    top: 3px;
+    right: 4px;
+    cursor: pointer;
+}
+
+#btnClose:hover {
+    border: 1px solid white;
+}
+
+fieldset {
+    margin: 5px;
+    border: 1px solid silver;
+    border-radius: 5px;
+}
+
+fieldset > div {
+    margin: 3px 0;
+}
+
+fieldset li {
+    margin-left: -1em;
+}
+
+legend {
+    font-size: .9em;
+    font-weight: bold;
+    color: silver;
+}
+
+.key {
+    display: inline-block;
+    font-family: monospace;
+    padding: 1px 5px;
+    margin: 3px;
+    background-color: silver;
+    border: 1px solid gray;
+    border-radius: 5px;
+}
+
+ul {
+    margin: 0;
+}
+
+.taCenter {
+    text-align: center;
+}
+
+.taRight {
+    text-align: right;
+}
+
+/* **** SLIDERS **** */
+
+.slider label {
+    cursor: pointer;
+}
+
+.slider div {
+    display: inline-block;
+    position: relative;
+    vertical-align: middle;
+    height: 15px;
+    margin: 0 15px;
+    cursor: e-resize;
+}
+
+.slider div:before {
+    content: "";
+    display: block;
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: 100%;
+    height: 2px;
+    margin-top: -1px;
+    background-color: black;
+}
+
+.slider div span {
+    display: block;
+    position: relative;
+    width: 15px;
+    height: inherit;
+    z-index: 2;
+    background-color: silver;
+    box-shadow: 1px 1px 3px gray;
+    margin-top: -2px;
+    margin-left: -8px;
+    border: 1px solid gray;
+    border-radius: 8px;
+    cursor: inherit;
+}
+
+.slider input {
+    width: 40px;
+    padding: 2px 5px;
+    box-shadow: inset 0 0 1px rgba(0, 0, 0, 0.5);
+    border-width: 0;
+    border-radius: 5px;
+}
+
+/* **** SWITCHES **** */
+
+.switch {
+    display: inline-block;
+    margin-right: 10px;
+    vertical-align: middle;
+}
+
+.switch input {
+    display: inline-block;
+    position: absolute;
+    top: -1000px;
+    /*
+    transform: scale(0);
+    -webkit-transform: scale(0);
+    padding: 0;
+    margin: 0;
+    */
+}
+
+.switch i {
+    margin-left: 5px;
+    display: inline-block;
+    cursor: pointer;
+    padding-right: 15px;
+    transition: all ease 0.2s;
+    -webkit-transition: all ease 0.2s;
+    border-radius: 20px;
+    box-shadow: inset 0 0 1px rgba(0, 0, 0, 0.5);
+}
+
+.switch i::before {
+    display: block;
+    content: '';
+    width: 15px;
+    height: 15px;
+    border-radius: 15px;
+    border: 1px solid gray;
+    background: silver;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.switch :focus + i {
+    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.8);
+    -webkit-box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.8);
+}
+
+.switch :checked + i {
+    padding-right: 0;
+    padding-left: 15px;
+    box-shadow: inset 0 0 1px rgba(0, 0, 0, 0.5), inset 0 0 40px lightblue;
+    -webkit-box-shadow: inset 0 0 1px rgba(0, 0, 0, 0.5), inset 0 0 40px lightblue;
+}
+
+.switch.red :checked + i {
+    box-shadow: inset 0 0 1px rgba(0, 0, 0, 0.5), inset 0 0 40px red;
+    -webkit-box-shadow: inset 0 0 1px rgba(0, 0, 0, 0.5), inset 0 0 40px red;
+}
+
+

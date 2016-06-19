@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+    <title>three.js - Stereoscopic ride</title>
+    <meta name="author" content="cosmicmac">
+    <meta name="description" content="Stereoscopic experiments with three.js - v1.0 20160619">
+    <link rel="stylesheet" type="text/css" href="css/default.css">
+    <script src="js/three.min.js"></script>
+    <script src="js/stereo/cmStereoCamera.js"></script>
+    <script src="js/stereo/allStereoEffects.js"></script>
+    <script src="js/controls/OrbitControls.js"></script>
+    <script src="js/CurveExtras.js"></script>
+    <script src="js/slider.js"></script>
+    <style type="text/css">
+
+        select {
+            width: 215px;
+            margin-left: 10px;
+            padding: 2px 5px;
+            box-shadow: inset 0 0 1px rgba(0, 0, 0, 0.5);
+            border-width: 0;
+            border-radius: 5px;
+        }
+
+        label.left,
+        .slider label,
+        .switch span {
+            display: inline-block;
+            min-width: 60px;
+            text-align: right;
+        }
+
+        .switch span {
+            margin-right: 10px;
+        }
+
+        .disabled {
+            pointer-events: none;
+            opacity: .5;
+        }
+
+        :disabled {
+            background-color: white;
+        }
+
+    </style>
+</head>
+<body>
+
+<div id="main"></div>
+
+<img id="btnSettings" src="img/settings.png" width="34" height="36" title="Settings"/>
+<img id="settingsArrow" src="img/settings_arrow.png" width="264" height="99"/>
+
+<div id="settings">
+
+    <div id="settingsTitle">Settings <img id="btnClose" src="img/close.png" width="16" height="16" title="Close"/></div>
+
+    <fieldset>
+        <legend>Curve</legend>
+
+        <div>
+            <label class="left" for="selCurve">Type</label>
+            <select id="selCurve">
+                <option value="GrannyKnot">GrannyKnot</option>
+                <option value="VivianiCurve">VivianiCurve</option>
+                <option value="KnotCurve">KnotCurve</option>
+                <option value="TrefoilKnot">TrefoilKnot</option>
+                <option value="TorusKnot">TorusKnot</option>
+                <option value="CinquefoilKnot">CinquefoilKnot</option>
+            </select>
+        </div>
+        <div class="slider" id="sldRadius"></div>
+
+    </fieldset>
+
+    <fieldset>
+        <legend>Stereo</legend>
+
+        <div>
+            <label class="left" for="selStereoMode">Mode</label>
+            <select id="selStereoMode">
+                <option value="anaColor">Anaglyph</option>
+                <option value="anaRedcyan">Anaglyph (red/cyan)</option>
+                <option value="anaGray">Anaglyph (gray)</option>
+                <option value="sbs">Side by side</option>
+                <option value="sbsHalf">Side by side (half size)</option>
+                <option value="interlaced">Interlaced</option>
+            </select>
+        </div>
+        <div class="slider" id="sldBase"></div>
+        <div class="slider" id="sldFocus"></div>
+
+    </fieldset>
+
+    <fieldset>
+        <legend>Ride camera</legend>
+
+        <label class="switch"><span>Show</span><input id="chkShowRideCam" type="checkbox"/><i></i></label>
+        <label class="switch disabled"><span>Look ahead</span><input id="chkLookAhead" type="checkbox" disabled="disabled"/><i></i></label>
+        <div class="slider disabled" id="sldOffset"></div>
+        <div class="slider disabled" id="sldSpeed"></div>
+
+    </fieldset>
+
+    <fieldset>
+        <legend>Distant camera mouse controls</legend>
+
+        <ul>
+            <li><span class="key">Left + drag</span> Orbit camera</li>
+            <li><span class="key">Right + drag</span> Pan camera</li>
+            <li><span class="key">Wheel</span> Zoom camera</li>
+        </ul>
+
+    </fieldset>
+
+    <fieldset>
+        <legend>Keyboard shortcuts</legend>
+
+        <ul>
+            <li><span class="key">s</span> Show this dialog
+            <li><span class="key">r</span> Toggle ride camera
+            <li><span class="key">x</span> Swap left/right
+            <li><span class="key">Esc</span> Reset distant view
+        </ul>
+        <p style="margin: .5em 0">Ride camera only:</p>
+        <ul>
+            <li><span class="key">l</span> Toggle look ahead
+            <li><span class="key">+</span>/<span class="key">-</span> Increase/decrease speed
+            <li><span class="key">&uparrow;</span>/<span class="key">&downarrow;</span> Increase/decrease offset
+        </ul>
+        <p style="margin: .5em 0">Misc:</p>
+        <ul>
+            <li><span class="key">h</span> Toggle helpers
+            <li><span class="key">b</span> Toggle bounding sphere
+        </ul>
+    </fieldset>
+
+</div>
+
+<div id="statusBar">
+    <div id="statusText"></div>
+    <div id="statusLink">Get source on <a href="https://github.com/CosmicMac/threejs-stereoscopic" target="_blank">GitHub</a></div>
+</div>
+
+<script>
+
+    var scene, renderer, camera, rideCamera, light, controls;
+    var sldRadius, sldBase, sldFocus, sldOffset, sldSpeed;
+
+    var tube, tubeMesh,
+        radius               = 3,				// Default tube radius
+        segmentsFactor       = 1,				// Decrease if animation is jerky
+        radiusSegmentsFactor = 1;				// Decrease if animation is jerky
+
+    var stereoMode         = "anaColor",		// Default stereo mode
+        stereoFocus        = null,				// Stereo params for standard camera (see setStereoParams)
+        stereoBase         = null,
+        stereoFocusRideCam = 2,					// Stereo params for ride camera
+        stereoBaseRideCam  = 0.05;
+
+    var fov          = 50,						// Cameras field of view
+        animation    = false,					// Ride camera is not animated by default
+        offset       = radius + 1,				// Distance from the center of the tube to the ride camera (0 means center of the tube)
+        lookAhead    = false,					// Set the ride camera look ahead
+        lookAheadDst = 15,						// Distance of the spline point where the ride camera looks ahead
+        speed        = 5,						// Default speed of the ride camera
+        maxSpeed     = 10,						// Max speed of the ride camera
+        speedFactor;
+
+    var splines       = {						// Curve flavours => type of curve (scale), ride camera rotation around spline tangent
+        GrannyKnot:     {curve: new THREE.Curves.GrannyKnot(30), rideCamRotation: Math.PI},
+        VivianiCurve:   {curve: new THREE.Curves.VivianiCurve(12), rideCamRotation: Math.PI / 2},
+        KnotCurve:      {curve: new THREE.Curves.KnotCurve(.9), rideCamRotation: Math.PI / 2},
+        TrefoilKnot:    {curve: new THREE.Curves.TrefoilKnot(15), rideCamRotation: Math.PI / 2},
+        TorusKnot:      {curve: new THREE.Curves.TorusKnot(15), rideCamRotation: Math.PI},
+        CinquefoilKnot: {curve: new THREE.Curves.CinquefoilKnot(15), rideCamRotation: Math.PI}
+    };
+    var currentSpline = "GrannyKnot";				// Default curve
+
+    var lightColor = 0xf8f0ca;						// Light color (supposed to match the skybox ambiance)
+    var sldWidth   = 150;							// Slider widgets width
+
+    // Only for debug & tweaking purpose...
+    var lightHelper, rideCameraHelper, axisHelper, binormalHelper, dirHelper, rideCamVectorHelper, lightShadowHelper;
+    var helpers        = false;
+    var mono           = false;
+    var boundingSphere = null;
+
+    /**
+     * Main loop
+     */
+    function draw() {
+        requestAnimationFrame(draw);
+        controls.update(); // required if controls.enableDamping = true, or if controls.autoRotate = true
+        render();
+    }
+
+    /**
+     * Entry point
+     */
+    function init() {
+
+        // **** SCENE ****
+
+        scene     = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(lightColor, 0.007);
+
+
+        // **** RENDERER ****
+
+        renderer = new THREE.WebGLRenderer({antialias: true});
+        renderer.setClearColor(0xdadada);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+
+        // !FIXME missing shadows :(
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type    = THREE.PCFSoftShadowMap;
+
+        $("main").appendChild(renderer.domElement);
+
+
+        // **** CAMERAS ****
+
+        // Camera for distant view (focus & base stereo params will be defined on tube mesh creation)
+        camera = new THREE.PerspectiveCamera(fov, window.innerWidth / window.innerHeight, .01, 5000);
+        camera.position.set(-30, 30, 100);
+        scene.add(camera);
+
+        // Camera for animation (stereo params are predefined)
+        rideCamera       = new THREE.PerspectiveCamera(fov, window.innerWidth / window.innerHeight, .01, 5000);
+        rideCamera.focus = stereoFocusRideCam;
+        rideCamera.base  = stereoBaseRideCam;
+        scene.add(rideCamera);
+
+
+        // **** LIGHTS ****
+
+        var aLight = new THREE.AmbientLight(lightColor, .3);
+        scene.add(aLight);
+
+        light = new THREE.DirectionalLight(lightColor, 1);
+        light.position.set(-300, 190, 300);
+
+        // !FIXME missing shadows :(
+        light.castShadow            = true;
+        light.shadow.mapSize.width  = 1024; // default is 512
+        light.shadow.mapSize.height = 1024; // default is 512
+        light.shadow.camera.near    = 300;
+        light.shadow.camera.far     = 600;
+        light.shadow.camera.fov     = fov;
+        light.shadow.camera.left    = -200;
+        light.shadow.camera.right   = 200;
+        light.shadow.camera.top     = 200;
+        light.shadow.camera.bottom  = -200;
+
+        scene.add(light);
+
+        // **** OBJECTS ****
+
+        // Tube mesh
+        addTube(currentSpline);
+
+        // Skybox
+        var path   = "img/textures/cube/skybox/";
+        var format = '.jpg';
+        var urls   = [
+            path + 'px' + format, path + 'nx' + format,
+            path + 'py' + format, path + 'ny' + format,
+            path + 'pz' + format, path + 'nz' + format
+        ];
+
+        var reflectionCube    = new THREE.CubeTextureLoader().load(urls);
+        reflectionCube.format = THREE.RGBFormat;
+
+        var shader = THREE.ShaderLib["cube"];
+
+        shader.uniforms["tCube"].value = reflectionCube;
+
+        var skyboxMesh          = new THREE.Mesh(
+            new THREE.BoxGeometry(1500, 1500, 1500),
+            new THREE.ShaderMaterial({
+                fragmentShader: shader.fragmentShader,
+                vertexShader:   shader.vertexShader,
+                uniforms:       shader.uniforms,
+                depthWrite:     false,
+                side:           THREE.BackSide
+            })
+        );
+        skyboxMesh.material.fog = false;
+        scene.add(skyboxMesh);
+
+
+        // **** CONTROLS ****
+
+        controls                 = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableKeys      = false;
+        controls.maxDistance     = 500;
+        controls.autoRotate      = true;
+        controls.autoRotateSpeed = .2;
+
+
+        // **** SLIDERS ****
+
+        sldRadius = new slider("sldRadius", "Radius", sldWidth, function (value) {
+            radius = value;
+            addTube(currentSpline);
+        }, .5, 10, 3, 1);
+
+        sldBase = new slider("sldBase", "Base", sldWidth, function (value) {
+            var cam  = animation ? rideCamera : camera;
+            cam.base = value;
+            cam.updateProjectionMatrix();
+        }, .01, Math.round(stereoBase * 4), Math.round(stereoBase * 1000) / 1000, 3);
+
+        sldFocus = new slider("sldFocus", "Window", sldWidth, function (value) {
+            var cam   = animation ? rideCamera : camera;
+            cam.focus = value;
+            cam.updateProjectionMatrix();
+        }, 1, Math.round(stereoFocus * 2), Math.round(stereoFocus * 10) / 10, 1);
+
+        sldOffset = new slider("sldOffset", "Offset", sldWidth, function (value) {
+            offset = value;
+        }, radius - 10, radius + 10, offset, 1);
+        sldOffset.disable();
+
+        sldSpeed = new slider("sldSpeed", "Speed", sldWidth, function (value) {
+            speed = value;
+            setSpeedFactor()
+        }, 0, maxSpeed, speed, 0);
+        sldSpeed.disable();
+
+        setStereoEffect(renderer, camera, stereoMode, fov);
+        setSpeedFactor();
+        addEventHandlers();
+        draw();
+    }
+
+    /**
+     * Set tube geometry
+     */
+    function addTube(spline) {
+
+        if (tubeMesh)
+            scene.remove(tubeMesh);
+
+        var curve          = splines[spline].curve;
+        var segments       = Math.round(curve.getLength() * segmentsFactor);
+        var radiusSegments = Math.round(radius * 20 * radiusSegmentsFactor);
+
+        tube = new THREE.TubeGeometry(curve, segments, radius, radiusSegments, true);
+
+        var map   = new THREE.TextureLoader().load("img/textures/alpha01.png");
+        map.wrapS = THREE.RepeatWrapping;
+        map.wrapT = THREE.MirroredRepeatWrapping;
+        map.repeat.set(segments / 2, 32);
+
+        tubeMesh = THREE.SceneUtils.createMultiMaterialObject(tube, [
+            new THREE.MeshLambertMaterial({
+                map:  map,
+                side: THREE.FrontSide
+                //emissive:          lightColor,
+                //emissiveIntensity: .2
+            }),
+            new THREE.MeshLambertMaterial({
+                alphaMap:    map,
+                side:        THREE.DoubleSide,
+                transparent: true,
+                opacity:     .5
+            })
+        ]);
+
+        // !FIXME missing shadows :(
+        tubeMesh.castShadow    = true;
+        tubeMesh.receiveShadow = true;
+
+        scene.add(tubeMesh);
+
+        setStereoParams(camera, tubeMesh);
+    }
+
+
+    /**
+     * Do the magic
+     */
+    var x = 0, prevTime = Date.now();
+    function render() {
+
+        if (helpers || animation) {
+
+            // Animate camera along spline
+
+            var time = Date.now();
+            var diff = (time - prevTime);
+            prevTime = time;
+
+            x = (x + diff * speedFactor) % 10000;
+
+            var t = x / 10000;
+
+            var pos = tube.parameters.path.getPointAt(t);
+
+            // Interpolation
+            var segments = tube.tangents.length;
+            var pickt    = t * segments;
+            var pick     = Math.floor(pickt);
+            var pickNext = ( pick + 1 ) % segments;
+            var dir      = tube.parameters.path.getTangentAt(t);
+
+            // Get binormal vector
+            var binormal = new THREE.Vector3();
+            binormal.subVectors(tube.binormals[pickNext], tube.binormals[pick]);
+            binormal.multiplyScalar(pickt - pick).add(tube.binormals[pick]);
+
+            // Get ride camera vector
+            var rideCamVector = new THREE.Vector3().copy(binormal);
+            rideCamVector.applyQuaternion(
+                new THREE.Quaternion()
+                    .setFromAxisAngle(dir.normalize(), splines[currentSpline]['rideCamRotation'])
+            );
+
+            // Update helpers
+            if (helpers) {
+                scene.remove(binormalHelper);
+                binormalHelper = new THREE.ArrowHelper(binormal.normalize(), pos, 10, 'white', 2, 2);
+                scene.add(binormalHelper);
+
+                scene.remove(dirHelper);
+                dirHelper = new THREE.ArrowHelper(dir, pos, 20, 'blue', 2, 2);
+                scene.add(dirHelper);
+
+                scene.remove(rideCamVectorHelper);
+                rideCamVectorHelper = new THREE.ArrowHelper(rideCamVector, pos, 10, 'black', 2, 2);
+                scene.add(rideCamVectorHelper);
+            }
+
+            // Add offset to rideCamVector
+            pos.add(rideCamVector.multiplyScalar(offset));
+
+            // Set ride camera position along the tube
+            rideCamera.position.copy(pos);
+
+            // Using arclength for stabilization in look ahead
+            var lookAt = lookAhead ?
+                tube.parameters.path.getPointAt(( t + lookAheadDst / tube.parameters.path.getLength() ) % 1) :
+                new THREE.Vector3().copy(pos).add(dir);
+
+            rideCamera.matrix.lookAt(rideCamera.position, lookAt, rideCamVector);
+
+            // Set ride camera position around the tube
+            rideCamera.rotation.setFromRotationMatrix(rideCamera.matrix, rideCamera.rotation.order);
+        }
+
+        // Render
+        if (mono) {
+            renderer.render(scene, animation ? rideCamera : camera);
+        }
+        else {
+            stereoEffect.render(scene, animation ? rideCamera : camera);
+        }
+    }
+
+    /**
+     * Set stereo params
+     *
+     * Set standard camera focus and stereo base depending on shortest distance from camera to object
+     *
+     * @param camera
+     * @param object
+     */
+    function setStereoParams(camera, object) {
+
+        var g = object.children[0].geometry;
+        if (g.boundingSphere === null)
+            g.computeBoundingSphere();
+        var distance = camera.position.distanceTo(object.position) - g.boundingSphere.radius;
+
+        // Display boundingSphere
+        if (0) {
+            var sphere = new THREE.Mesh(
+                new THREE.SphereGeometry(g.boundingSphere.radius, 40, 20),
+                new THREE.MeshPhongMaterial({wireframe: true, color: 0xdadada})
+            );
+            sphere.position.set(0, 0, 0);
+            scene.add(sphere);
+        }
+
+        camera.focus = stereoFocus = distance;
+        camera.base = stereoBase = distance / 30;
+    }
+
+
+    /**
+     * Toggle helpers
+     */
+    function toggleHelpers() {
+        if (helpers = !helpers) {
+
+            lightHelper = new THREE.DirectionalLightHelper(light, 200);
+            scene.add(lightHelper);
+
+            rideCameraHelper = new THREE.CameraHelper(rideCamera);
+            scene.add(rideCameraHelper);
+
+            axisHelper = new THREE.AxisHelper(20);
+            scene.add(axisHelper);
+
+            lightShadowHelper = new THREE.CameraHelper(light.shadow.camera);
+            scene.add(lightShadowHelper);
+
+        }
+        else {
+            scene.remove(lightHelper);
+            scene.remove(rideCameraHelper);
+            scene.remove(axisHelper);
+            scene.remove(lightShadowHelper);
+            scene.remove(binormalHelper);
+            scene.remove(dirHelper);
+            scene.remove(rideCamVectorHelper);
+        }
+    }
+
+
+    /**
+     * Toggle bounding sphere
+     */
+    function toggleBoundingSphere() {
+        if (boundingSphere) {
+            scene.remove(boundingSphere);
+            boundingSphere = null;
+        } else {
+            boundingSphere = new THREE.Mesh(
+                new THREE.SphereGeometry(tubeMesh.children[0].geometry.boundingSphere.radius, 40, 20),
+                new THREE.MeshPhongMaterial({wireframe: true, color: 0xdadada})
+            );
+            boundingSphere.position.set(0, 0, 0);
+            scene.add(boundingSphere);
+        }
+    }
+
+
+    /**
+     * Set animation state
+     *
+     * @param {boolean} state
+     */
+    function setAnimation(state) {
+
+        var chkLookAhead = $("chkLookAhead");
+
+        if (animation = state) {
+            sldOffset.enable();
+            chkLookAhead.disabled = false;
+            chkLookAhead.parentNode.classList.remove("disabled");
+            sldSpeed.enable();
+            sldFocus.init(1, Math.round(stereoFocusRideCam * 2), stereoFocusRideCam, 1);
+            sldBase.init(.01, 1, stereoBaseRideCam, 3);
+        } else {
+            sldOffset.disable();
+            chkLookAhead.disabled = true;
+            chkLookAhead.parentNode.classList.add("disabled");
+            sldSpeed.disable();
+            sldFocus.init(1, Math.round(stereoFocus * 2), Math.round(stereoFocus * 10) / 10, 1);
+            sldBase.init(.01, Math.round(stereoBase * 4), Math.round(stereoBase * 1000) / 1000, 3);
+        }
+
+    }
+
+
+    /**
+     * JQuery like helper
+     *
+     * @param {string} id DOM element id
+     */
+    function $(id) {
+        return document.getElementById(id);
+    }
+
+
+    /**
+     * Set speed factor
+     */
+    function setSpeedFactor() {
+        speedFactor = speed / maxSpeed / 2;
+    }
+
+
+    /**
+     * Set status text
+     */
+    var timeout;
+    function setStatus(text) {
+        if (timeout) {
+            clearTimeout(timeout);
+        }
+        var statusText       = $("statusText");
+        statusText.innerText = text;
+        timeout              = setTimeout(function () {
+            statusText.innerText = "";
+        }, 5000);
+    }
+
+
+    /**
+     * Define event handlers
+     */
+    function addEventHandlers() {
+
+        window.addEventListener("resize", function () {
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            stereoEffect.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        window.addEventListener("load", function () {
+            $("settingsArrow").style.display = "block";
+        });
+
+        $("btnSettings").addEventListener("click", function () {
+            $("settings").style.display = "block";
+        });
+
+        $("btnClose").addEventListener("click", function () {
+            $("settings").style.display = "none";
+        });
+
+        $("selCurve").addEventListener("change", function () {
+            currentSpline = this.value;
+            addTube(currentSpline);
+            setStereoParams(camera, tubeMesh);
+            sldFocus.value = stereoFocus;
+            sldFocus.update();
+            sldBase.value = stereoBase;
+            sldBase.update();
+        });
+
+        $("selStereoMode").addEventListener("change", function () {
+            setStereoEffect(renderer, camera, this.value, fov);
+        });
+
+        $("chkShowRideCam").addEventListener("change", function () {
+            setAnimation(this.checked)
+        });
+
+        $("chkLookAhead").addEventListener("change", function () {
+            lookAhead = this.checked;
+        });
+
+        document.addEventListener("keydown", function (e) {
+
+            console.log(e.keyCode + ' - ' + e.key);
+
+            var settings = $("settings");
+
+            switch (true) {
+
+                case (e.keyCode == 83):                                                     // [s] Show settings dialog
+                    settings.style.display = "block";
+                    break;
+
+                case (e.keyCode == 27 && settings.style.display == "block"):                // [Escape] Close settings dialog
+                    settings.style.display = "none";
+                    break;
+
+                case (e.keyCode == 27 && animation):                                        // [Escape] Stop ride camera
+                    setAnimation(false);
+                    $("chkShowRideCam").checked = animation;
+                    break;
+
+                case (e.keyCode == 27):                                                     // [Escape] Reset distant view
+                    controls.reset();
+                    break;
+
+                case (e.keyCode == 82):                                                     // [r] Toggle ride camera
+                    e.preventDefault();
+                    setAnimation(!animation);
+                    $("chkShowRideCam").checked = animation;
+                    break;
+
+                case (animation && e.keyCode == 76):                                        // [l] Toggle look ahead
+                    e.preventDefault();
+                    $("chkLookAhead").checked = (lookAhead = !lookAhead);
+                    setStatus("Look ahead is now " + (lookAhead ? "on" : "off"));
+                    break;
+
+                case (e.keyCode == 88):                                                     // [x] Swap left/right views
+                    e.preventDefault();
+                    stereoEffect.swapLR = !stereoEffect.swapLR;
+                    setStatus("View is now " + (stereoEffect.swapLR ? "crossed" : "parallel"));
+                    break;
+
+                case (animation && (e.keyCode == 38 || e.keyCode == 33)):                   // [ArrowUp] or [PageUp] Increase offset
+                    e.preventDefault();
+                    sldOffset.setValue(offset + .1);
+                    setStatus("Offset is now " + offset);
+                    break;
+
+                case (animation && (e.keyCode == 40 || e.keyCode == 34)):                   // [ArrowDown] or [PageDown] Decrease offset
+                    e.preventDefault();
+                    sldOffset.setValue(offset - .1);
+                    setStatus("Offset is now " + offset);
+                    break;
+
+                case ((animation || helpers) && (e.key == "+" || e.keyCode == 107)):        // [+] Increase speed
+                    e.preventDefault();
+                    sldSpeed.setValue(Math.min(maxSpeed, speed + 1));
+                    setStatus("Speed is now " + speed);
+                    break;
+
+                case ((animation || helpers) && (e.key == "-" || e.keyCode == 109)):        // [-] Decrease speed
+                    e.preventDefault();
+                    sldSpeed.setValue(Math.max(0, speed - 1));
+                    setStatus("Speed is now " + speed);
+                    break;
+
+                case (e.keyCode == 72):                                                     // [h] Toggle helpers
+                    e.preventDefault();
+                    toggleHelpers();
+                    break;
+
+                case (e.keyCode == 77):                                                     // [m] Toggle mono
+                    e.preventDefault();
+                    mono = !mono;
+                    break;
+
+                case (e.keyCode == 66):                                                     // [b] Toggle boundingSphere
+                    toggleBoundingSphere();
+                    break;
+            }
+        });
+    }
+
+    init();
+
+</script>
+
+</body>
+</html>

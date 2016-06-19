@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+    <title>three.js - Stereoscopic boilerplate</title>
+    <meta name="author" content="cosmicmac">
+    <meta name="description" content="three.js stereoscopic boilerplate - v1.0 20160619">
+    <link rel="stylesheet" type="text/css" href="css/default.css">
+    <script src="js/three.min.js"></script>
+    <script src="js/stereo/cmStereoCamera.js"></script>
+    <script src="js/stereo/allStereoEffects.js"></script>
+    <script src="js/controls/OrbitControls.js"></script>
+    <script src="js/slider.js"></script>
+    <style type="text/css">
+
+        select {
+            width: 215px;
+            margin-left: 10px;
+            padding: 2px 5px;
+            box-shadow: inset 0 0 1px rgba(0, 0, 0, 0.5);
+            border-width: 0;
+            border-radius: 5px;
+        }
+
+        label.left,
+        .slider label {
+            display: inline-block;
+            min-width: 60px;
+            text-align: right;
+        }
+
+    </style>
+</head>
+<body>
+
+<div id="main"></div>
+
+<img id="btnSettings" src="img/settings.png" width="34" height="36" title="Settings"/>
+<img id="settingsArrow" src="img/settings_arrow.png" width="264" height="99"/>
+
+<div id="settings">
+
+    <div id="settingsTitle">Settings <img id="btnClose" src="img/close.png" width="16" height="16" title="Close"/></div>
+
+    <fieldset>
+        <legend>Stereo</legend>
+
+        <div>
+            <label class="left" for="selStereoMode">Mode</label>
+            <select id="selStereoMode">
+                <option value="anaColor">Anaglyph</option>
+                <option value="anaRedcyan">Anaglyph (red/cyan)</option>
+                <option value="anaGray">Anaglyph (gray)</option>
+                <option value="sbs">Side by side</option>
+                <option value="sbsHalf">Side by side (half size)</option>
+                <option value="interlaced">Interlaced</option>
+            </select>
+        </div>
+        <div class="slider" id="sldBase"></div>
+        <div class="slider" id="sldFocus"></div>
+
+    </fieldset>
+
+    <fieldset>
+        <legend>Mouse controls</legend>
+
+        <ul>
+            <li><span class="key">Left + drag</span> Orbit camera</li>
+            <li><span class="key">Right + drag</span> Pan camera</li>
+            <li><span class="key">Wheel</span> Zoom camera</li>
+        </ul>
+
+    </fieldset>
+
+    <fieldset>
+        <legend>Keyboard shortcuts</legend>
+
+        <ul>
+            <li><span class="key">s</span> Show this dialog
+            <li><span class="key">x</span> Swap left/right
+            <li><span class="key">Esc</span> Reset view
+            <li><span class="key">m</span> Toggle mono
+            <li><span class="key">h</span> Toggle helpers
+            <li><span class="key">b</span> Toggle bounding sphere
+        </ul>
+    </fieldset>
+
+</div>
+
+<div id="statusBar">
+    <div id="statusText"></div>
+    <div id="statusLink">Get source on <a href="https://github.com/CosmicMac/threejs-stereoscopic" target="_blank">GitHub</a></div>
+</div>
+
+<script>
+
+    var scene, renderer, camera, light, controls, floor;
+    var sldBase, sldFocus;
+
+    var torusRadius = 5;
+
+    var stereoMode  = "anaColor",		// Default stereo mode
+        stereoFocus = null,				// Stereo params (see setStereoParams)
+        stereoBase  = null;
+
+    var fov = 50;						// Camera field of view
+
+    var lightColor = 0xf8f0ca;			// Light color (supposed to match the skybox ambiance)
+
+    var sldWidth = 150;					// Slider widgets width
+
+    var boundingSphere = null;
+
+    // Only useful for debug...
+    var lightHelper, axisHelper, lightShadowHelper;
+    var helpers = false;
+    var mono    = false;
+
+    /**
+     * Main loop
+     */
+    function draw() {
+        requestAnimationFrame(draw);
+        controls.update(); // required if controls.enableDamping = true, or if controls.autoRotate = true
+        render();
+    }
+
+
+    /**
+     * Entry point
+     */
+    function init() {
+
+        // **** SCENE ****
+
+        scene     = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(lightColor, 0.02);
+
+
+        // **** RENDERER ****
+
+        renderer = new THREE.WebGLRenderer({antialias: true});
+        renderer.setClearColor(0xdadada);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type    = THREE.PCFSoftShadowMap;
+
+        $("main").appendChild(renderer.domElement);
+
+
+        // **** CAMERA ****
+
+        camera = new THREE.PerspectiveCamera(fov, window.innerWidth / window.innerHeight, .01, 2000);
+        camera.position.set(15, 7, 25);
+        scene.add(camera);
+
+
+        // **** LIGHTS ****
+
+        var aLight = new THREE.AmbientLight(lightColor, .5);
+        scene.add(aLight);
+
+        light = new THREE.DirectionalLight(lightColor, 1);
+        light.position.set(-300, 190, 300);
+
+        light.castShadow            = true;
+        light.shadow.mapSize.width  = 4096; // default is 512
+        light.shadow.mapSize.height = 4096; // default is 512
+        light.shadow.camera.near    = 300;
+        light.shadow.camera.far     = 600;
+        light.shadow.camera.fov     = fov;
+        light.shadow.camera.left    = -200;
+        light.shadow.camera.right   = 200;
+        light.shadow.camera.top     = 200;
+        light.shadow.camera.bottom  = -200;
+
+        scene.add(light);
+
+
+        // **** OBJECTS ****
+
+        // Torus
+        var torus = new THREE.Mesh(
+            new THREE.TorusKnotGeometry(torusRadius / 2, torusRadius / 10, 128, 32),
+            new THREE.MeshLambertMaterial({color: 'gray'})
+        );
+        torus.position.set(0, torusRadius, 0);
+        torus.castShadow    = true;
+        torus.receiveShadow = true;
+        scene.add(torus);
+
+        // Floor
+        var floorTexture   = new THREE.TextureLoader().load("img/textures/checkerboard.jpg");
+        floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping;
+        floorTexture.repeat.set(5, 5);
+
+        floor = new THREE.Mesh(
+            new THREE.PlaneGeometry(20, 20, 1, 1),
+            new THREE.MeshLambertMaterial({map: floorTexture, side: THREE.DoubleSide})
+        );
+        floor.position.set(0, 0, 0);
+        floor.rotation.x    = -Math.PI / 2;
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        setStereoParams(camera, floor);
+
+        // Skybox
+        var path   = "img/textures/cube/skybox/";
+        var format = '.jpg';
+        var urls   = [
+            path + 'px' + format, path + 'nx' + format,
+            path + 'py' + format, path + 'ny' + format,
+            path + 'pz' + format, path + 'nz' + format
+        ];
+
+        var reflectionCube    = new THREE.CubeTextureLoader().load(urls);
+        reflectionCube.format = THREE.RGBFormat;
+
+        var shader = THREE.ShaderLib["cube"];
+
+        shader.uniforms["tCube"].value = reflectionCube;
+
+        var skyboxMesh          = new THREE.Mesh(
+            new THREE.BoxGeometry(1500, 1500, 1500),
+            new THREE.ShaderMaterial({
+                fragmentShader: shader.fragmentShader,
+                vertexShader:   shader.vertexShader,
+                uniforms:       shader.uniforms,
+                depthWrite:     false,
+                side:           THREE.BackSide
+            })
+        );
+        skyboxMesh.material.fog = false;
+        skyboxMesh.castShadow   = false;
+        scene.add(skyboxMesh);
+
+
+        // **** CONTROLS ****
+
+        controls                 = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableKeys      = false;
+        controls.maxDistance     = 500;
+        controls.autoRotate      = true;
+        controls.autoRotateSpeed = .2;
+
+
+        // **** SLIDERS ****
+
+        sldBase = new slider("sldBase", "Base", sldWidth, function (value) {
+            camera.base = value;
+            camera.updateProjectionMatrix();
+        }, .01, Math.round(stereoBase * 4), Math.round(stereoBase * 1000) / 1000, 3);
+
+        sldFocus = new slider("sldFocus", "Window", sldWidth, function (value) {
+            camera.focus = value;
+            camera.updateProjectionMatrix();
+        }, 1, Math.round(stereoFocus * 2), Math.round(stereoFocus * 10) / 10, 1);
+
+        setStereoEffect(renderer, camera, stereoMode, fov);
+        addEventHandlers();
+        draw();
+    }
+
+
+    /**
+     * Do the magic
+     */
+    function render() {
+        if (mono) {
+            renderer.render(scene, camera);
+        }
+        else {
+            stereoEffect.render(scene, camera);
+        }
+    }
+
+
+    /**
+     * Set stereo params
+     *
+     * Set standard camera focus and stereo base depending on shortest distance from camera to object
+     *
+     * @param camera
+     * @param object
+     */
+    function setStereoParams(camera, object) {
+
+        var g = object.geometry;
+        if (g.boundingSphere === null)
+            g.computeBoundingSphere();
+        var distance = camera.position.distanceTo(object.position) - g.boundingSphere.radius;
+
+        camera.focus = stereoFocus = distance;
+        camera.base = stereoBase = distance / 30;
+    }
+
+
+    /**
+     * Toggle bounding sphere
+     */
+    function toggleBoundingSphere() {
+        if (boundingSphere) {
+            scene.remove(boundingSphere);
+            boundingSphere = null;
+        } else {
+            boundingSphere = new THREE.Mesh(
+                new THREE.SphereGeometry(floor.geometry.boundingSphere.radius, 40, 20),
+                new THREE.MeshPhongMaterial({wireframe: true, color: 0xdadada})
+            );
+            boundingSphere.position.copy(floor.position);
+            boundingSphere.castShadow = true;
+            scene.add(boundingSphere);
+        }
+    }
+
+
+    /**
+     * Toggle helpers
+     */
+    function toggleHelpers() {
+        if (helpers = !helpers) {
+
+            lightHelper = new THREE.DirectionalLightHelper(light, 200);
+            scene.add(lightHelper);
+
+            axisHelper = new THREE.AxisHelper(20);
+            scene.add(axisHelper);
+
+            lightShadowHelper = new THREE.CameraHelper(light.shadow.camera);
+            scene.add(lightShadowHelper);
+
+        }
+        else {
+            scene.remove(lightHelper);
+            scene.remove(axisHelper);
+            scene.remove(lightShadowHelper);
+        }
+    }
+
+
+    /**
+     * JQuery like helper
+     *
+     * @param {string} id DOM element id
+     */
+    function $(id) {
+        return document.getElementById(id);
+    }
+
+
+    /**
+     * Set status text
+     */
+    var timeout;
+    function setStatus(text) {
+        if (timeout) {
+            clearTimeout(timeout);
+        }
+        var statusText       = $("statusText");
+        statusText.innerText = text;
+        timeout              = setTimeout(function () {
+            statusText.innerText = "";
+        }, 5000);
+    }
+
+
+    /**
+     * Define event handlers
+     */
+    function addEventHandlers() {
+
+        window.addEventListener("resize", function () {
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            stereoEffect.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        window.addEventListener("load", function () {
+            $("settingsArrow").style.display = "block";
+        });
+
+        $("btnSettings").addEventListener("click", function () {
+            $("settings").style.display = "block";
+        });
+
+        $("btnClose").addEventListener("click", function () {
+            $("settings").style.display = "none";
+        });
+
+
+        $("selStereoMode").addEventListener("change", function () {
+            setStereoEffect(renderer, camera, this.value, fov);
+        });
+
+        document.addEventListener("keydown", function (e) {
+
+            console.log(e.keyCode + ' - ' + e.key);
+
+            var settings = $("settings");
+
+            switch (true) {
+
+                case (e.keyCode == 83):                                                     // [s] Show settings dialog
+                    settings.style.display = "block";
+                    break;
+
+                case (e.keyCode == 27 && settings.style.display == "block"):                // [Escape] Close settings dialog
+                    settings.style.display = "none";
+                    break;
+
+                case (e.keyCode == 27):                                                     // [Escape] Reset mouse controls
+                    controls.reset();
+                    break;
+
+                case (e.keyCode == 88):                                                     // [x] Swap left/right views
+                    e.preventDefault();
+                    stereoEffect.swapLR = !stereoEffect.swapLR;
+                    setStatus("View is now " + (stereoEffect.swapLR ? "crossed" : "parallel"));
+                    break;
+
+                case (e.keyCode == 72):                                                     // [h] Toggle helpers
+                    e.preventDefault();
+                    toggleHelpers();
+                    break;
+
+                case (e.keyCode == 77):                                                     // [m] Toggle mono
+                    e.preventDefault();
+                    mono = !mono;
+                    break;
+
+                case (e.keyCode == 66):                                                     // [b] Toggle boundingSphere
+                    toggleBoundingSphere();
+                    break;
+
+            }
+        });
+    }
+
+    init();
+
+</script>
+
+</body>
+</html>
